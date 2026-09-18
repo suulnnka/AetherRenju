@@ -1,0 +1,24 @@
+{
+  "name": "aether-renju",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "纯 JS 五子棋/连珠引擎:无禁(自由)与有禁(RIF 禁手)双规则、RIF 递归禁手判定、alpha-beta 迭代加深 + 置换表 + VCF 式静态搜索,零依赖、无 DOM",
+  "main": "src/engine.js",
+  "exports": {
+    ".": "./src/engine.js",
+    "./engine": "./src/engine.js"
+  },
+  "scripts": {
+    "test": "node test/engine-test.mjs",
+    "bench": "node bench/bench.mjs nps",
+    "bench:moves": "node bench/bench.mjs moves",
+    "bench:forbidden": "node bench/bench.mjs forbidden"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/suulnnka/AetherRenju.git"
+  },
+  "keywords": ["gomoku", "renju", "five-in-a-row", "engine", "forbidden-moves", "五子棋", "连珠", "禁手"],
+  "private": false
+}
