@@ -7,11 +7,10 @@
 **在线体验:** 打开 <https://suulnnka.github.io/AetherWebOS/> 启动「五子棋」应用 ——
 那里面跑的就是本引擎(窗口信息行实时显示搜索深度 / 评分 / 节点数 / 耗时)。
 
-## 在线对弈页(GitHub Pages)
+## 在线对弈页(GitHub Pages,免 CI)
 
 本仓库自带一个**开箱即玩的对弈页**:布局与交互取自 WebOS 的五子棋应用,
-同一份 Worker 契约接的也是本仓库的引擎 —— 纯 JS,alpha-beta 迭代加深,无禁 / 有禁双规则。每次推送由 GitHub Actions
-自动部署(`.github/workflows/deploy-pages.yml`):
+同一份 Worker 契约接的也是本仓库的引擎 —— 纯 JS,alpha-beta 迭代加深,无禁 / 有禁双规则。**没有构建、没有 CI**:站点即仓库本身,GitHub Pages 原样引用仓库文件直接出页面:
 
 **<https://suulnnka.github.io/AetherRenju/>**
 
@@ -23,6 +22,10 @@ wasm 在 `wasm/`,全部按相对路径引用 —— 本地预览无需构建,仓
 python3 -m http.server 8000     # 仓库根起服
 # 打开 http://localhost:8000/
 ```
+
+线上开启只需一次:仓库 **Settings → Pages → Build and deployment → Source 选
+「Deploy from a branch」,Branch 选默认分支 + `/(root)`**;此后每次推送自动更新,
+不走任何 Actions。
 
 功能与 WebOS 应用一致:新对局 / 难度(引擎自报表)/ 人机或双人 / 换边 / 悔棋
 (规则档无禁 / 有禁切换,黑方禁手点标 ×),底栏左侧行棋状态、右侧实时引擎搜索信息。
