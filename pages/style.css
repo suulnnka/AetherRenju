@@ -1,0 +1,343 @@
+/* ============================================================
+ * AetherRenju 在线对弈页 —— 布局与组件样式取自 AetherWebOS
+ * (css/base.css 的主题变量 + css/appkit.css 的应用框架 +
+ * css/window.css 的窗体外观),棋盘部分移植自 webos 五子棋应用。
+ * ============================================================ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --radius: 10px;
+  --radius-s: 8px;
+  --accent: #5b6cff;
+  --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg: #eef0f4;
+  --panel: rgba(255, 255, 255, 0.78);
+  --panel-solid: #ffffff;
+  --panel-2: #f5f6f8;
+  --text: #1a2233;
+  --text-2: #66708a;
+  --border: rgba(20, 30, 60, 0.1);
+  --hover: rgba(20, 30, 60, 0.06);
+  --shadow: 0 12px 34px rgba(10, 20, 50, 0.16), 0 2px 8px rgba(10, 20, 50, 0.08);
+  --shadow-2: 0 4px 14px rgba(10, 20, 50, 0.12);
+}
+html[data-theme="dark"] {
+  --bg: #0c111e;
+  --panel: rgba(18, 24, 40, 0.74);
+  --panel-solid: #131a2a;
+  --panel-2: #1a2336;
+  --text: #eef1f8;
+  --text-2: #93a0bd;
+  --border: rgba(255, 255, 255, 0.1);
+  --hover: rgba(255, 255, 255, 0.07);
+  --shadow: 0 14px 40px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+}
+button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 1px; }
+
+/* ============ 桌面:webos 壁纸同族的渐变底 ============ */
+.desktop {
+  height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 22px;
+  background:
+    radial-gradient(130% 100% at 50% 0%, transparent 55%, rgba(0, 0, 0, 0.22)),
+    radial-gradient(120% 90% at 50% 8%, #2b3560, #20264a 55%, #151a35);
+}
+html[data-theme="light"] .desktop {
+  background:
+    radial-gradient(130% 100% at 50% 0%, transparent 55%, rgba(90, 110, 160, 0.18)),
+    radial-gradient(120% 90% at 50% 8%, #dfe6f5, #cdd8ee 55%, #bcc9e6);
+}
+
+/* ============ 窗体(样式对齐 webos 的 .win)============ */
+.win {
+  display: flex; flex-direction: column;
+  width: min(620px, 100%);
+  height: min(640px, 100%);
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: winIn 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+@keyframes winIn { from { transform: scale(0.94) translateY(14px); opacity: 0; } }
+
+.win-head {
+  flex: none; height: 38px;
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 6px 0 12px;
+  background: linear-gradient(color-mix(in srgb, var(--text) 3%, transparent), transparent);
+  border-bottom: 1px solid var(--border);
+  user-select: none; -webkit-user-select: none;
+}
+.win-head .win-ico {
+  width: 21px; height: 21px; border-radius: 6px;
+  display: grid; place-items: center; flex: none; overflow: hidden;
+}
+.win-head .win-ico svg { width: 100%; height: 100%; display: block; }
+.win-head .win-title {
+  flex: 1; font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wbtn {
+  width: 34px; height: 28px; border-radius: 7px;
+  display: grid; place-items: center;
+  color: var(--text-2); flex: none;
+  transition: background 0.12s, color 0.12s;
+}
+a.wbtn { color: var(--text-2); }
+.wbtn:hover { background: var(--hover); color: var(--text); text-decoration: none; }
+.wbtn svg { width: 15px; height: 15px; }
+
+.win-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.win-body > .app { flex: 1; }
+
+.page-foot {
+  flex: none; font-size: 12px; color: rgba(255, 255, 255, 0.55);
+  user-select: none; -webkit-user-select: none; text-align: center;
+}
+html[data-theme="light"] .page-foot { color: rgba(30, 42, 80, 0.55); }
+.page-foot .sep { margin: 0 8px; }
+.page-foot a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ============ 应用框架(AppKit)============ */
+.app {
+  position: relative;
+  display: flex; flex-direction: column;
+  min-height: 0; flex: 1;
+  font-size: 13.5px;
+  background: var(--panel-solid);
+  user-select: none; -webkit-user-select: none;
+}
+.app-toolbar {
+  flex: none; min-height: 44px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+  overflow-x: auto;
+}
+.app-toolbar .grow { flex: 1; }
+.app-body { flex: 1; min-width: 0; min-height: 0; overflow: hidden; position: relative; display: grid; place-items: center; }
+.app-status {
+  flex: none; height: 26px;
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-2); font-size: 12px;
+  background: var(--panel-2);
+}
+.app-status .grow { flex: 1; }
+.app-status .mono { font-family: var(--mono); }
+
+/* ---- 按钮 / 下拉(同 webos .btn / .select)---- */
+.btn {
+  height: 30px; padding: 0 12px;
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--border);
+  background: var(--panel-solid);
+  font-size: 12.5px;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--hover); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 85%, #000); }
+.btn:disabled { opacity: 0.45; pointer-events: none; }
+.btn svg { width: 13px; height: 13px; }
+.select {
+  height: 30px; padding: 0 10px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--border);
+  background: var(--panel-solid); color: var(--text);
+  font-size: 12.5px; outline: none;
+}
+.select:focus { border-color: var(--accent); }
+.dim { color: var(--text-2); }
+
+/* ---- 规则 / 难度下拉(五子棋应用同款):与 .btn 同高,给足宽度 ---- */
+.gk-mode-wrap, .gk-level-wrap { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.gk-mode { min-width: 88px; cursor: pointer; }
+.gk-level { min-width: 84px; cursor: pointer; }
+.gk-mode option, .gk-level option { background: var(--panel-solid); color: var(--text); }
+
+/* ============ 五子棋棋盘 ============ */
+/* --cs(格距)与 app.js 里的 CS 常量必须一致:棋盘线是 SVG 画的,
+ * 棋子/点击热区按 JS 算出的像素定位,两边不同步就会错位。
+ * 布局与围棋同源:子落在交叉点上。
+ * 固定像素布局,缩放交给外层 .fit-wrap(见 app.js 的 fitBoard)。 */
+.fit-wrap { flex: none; transform-origin: center center; }
+.gk-board {
+  --cs: 34px;
+  --pad: 22px;
+  position: relative;
+  flex: none;
+  width: calc(var(--cs) * 14 + var(--pad) * 2);
+  height: calc(var(--cs) * 14 + var(--pad) * 2);
+  border-radius: 10px;
+  background: linear-gradient(160deg, #f6e3bd, #e2c288 60%, #d7b478);
+  box-shadow: inset 0 0 26px rgba(120, 80, 20, 0.35), 0 12px 34px rgba(0, 0, 0, 0.5);
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* 棋盘线层:与 SVG viewBox 同尺寸,棋子与热区都挂在它里面 */
+.gk-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+}
+.gk-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
+.gk-line { stroke: #7c5220; stroke-width: 1.1; fill: none; }
+/* 星位(天元 + 四星) */
+.gk-star { fill: #7c5220; }
+/* 边缘坐标:列 A~O、行 15~1,给「上一手 H8」一个参照 */
+.gk-coord {
+  fill: #7c5220; opacity: 0.55; font-size: 9px;
+  font-family: var(--mono, monospace);
+  text-anchor: middle; dominant-baseline: middle;
+}
+
+/* 交叉点热区:比棋子略大,手指点得到 */
+.gk-pt {
+  position: absolute;
+  width: var(--cs); height: var(--cs);
+  transform: translate(-50%, -50%);
+  display: grid; place-items: center;
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; line-height: 1;
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+.gk-pt.can { cursor: pointer; }
+.gk-pt.ban { cursor: not-allowed; }
+.gk-pt:focus-visible { outline: 2px solid #22d3ee; outline-offset: -3px; z-index: 2; }
+
+/* 悬停虚影:轮到谁走,空点上就浮出半透明的那色子(仅玩家可落子时) */
+.gk-board.turn-b .gk-pt.can:hover .gk-ghost,
+.gk-board.turn-w .gk-pt.can:hover .gk-ghost { opacity: 0.45; }
+.gk-ghost {
+  position: absolute; inset: 8%;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+.gk-board.turn-b .gk-ghost {
+  background: radial-gradient(circle at 34% 28%, #6b7280, #111827 65%);
+}
+.gk-board.turn-w .gk-ghost {
+  background: radial-gradient(circle at 34% 28%, #ffffff, #cbd5e1 70%);
+}
+
+/* 棋子:黑曜石 / 白玉,带一点高光 */
+.gk-stone {
+  position: absolute; inset: 8%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.gk-stone.black {
+  background: radial-gradient(circle at 34% 28%, #5b6472, #1f2937 55%, #030712 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45), inset 0 2px 3px rgba(255, 255, 255, 0.18);
+}
+.gk-stone.white {
+  background: radial-gradient(circle at 34% 28%, #ffffff, #e8edf3 60%, #c3ccd8 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35), inset 0 -2px 4px rgba(100, 116, 139, 0.25);
+}
+/* 上一手:棋子上的小圆点标记(黑白取反色) */
+.gk-stone.last::after {
+  content: ''; position: absolute; inset: 0; margin: auto;
+  width: 28%; height: 28%;
+  border-radius: 50%;
+  background: #facc15;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+.gk-stone.white.last::after { background: #f59e0b; }
+/* 刚落下的子闪一下 */
+.gk-stone.drop { animation: gkDrop 0.25s ease-out; }
+@keyframes gkDrop {
+  from { transform: scale(1.3); }
+  to { transform: scale(1); }
+}
+
+/* 胜利连线:整条线上的棋子套呼吸金圈 */
+.gk-pt.gk-win::before {
+  content: ''; position: absolute; inset: 4%;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.95);
+  animation: gkWin 1.1s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes gkWin {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.95), 0 0 10px rgba(250, 204, 21, 0.35); }
+  50% { box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.45), 0 0 2px rgba(250, 204, 21, 0.2); }
+}
+
+/* 禁手标记(有禁模式黑方):红 ×,压在交叉点上 */
+.gk-ban {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  display: grid; place-items: center;
+}
+.gk-ban::before {
+  content: '';
+  width: 38%; height: 38%;
+  transform: rotate(45deg);
+  background:
+    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 2px 100% no-repeat;
+  color: rgba(220, 38, 38, 0.8);
+}
+
+/* ============ 对话框 / 吐司(webos 系统对话框与通知同族)============ */
+dialog#dlg {
+  border: 0; padding: 0; background: none;
+  max-width: min(360px, calc(100vw - 40px));
+}
+dialog#dlg::backdrop { background: rgba(5, 9, 20, 0.38); backdrop-filter: blur(1.5px); }
+.dlg-card {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+.dlg-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+.dlg-msg { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.dlg-foot { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+#toasts {
+  position: fixed; right: 14px; bottom: 14px;
+  display: flex; flex-direction: column-reverse; gap: 8px; z-index: 1200;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  width: min(320px, calc(100vw - 28px)); padding: 11px 12px;
+  background: var(--panel);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow-2);
+  font-size: 12.5px;
+  animation: toastIn 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  cursor: pointer;
+}
+@keyframes toastIn { from { transform: translateX(30px); opacity: 0; } }
+.toast.out { transition: all 0.2s; transform: translateX(40px); opacity: 0; }

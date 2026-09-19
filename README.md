@@ -7,6 +7,27 @@
 **在线体验:** 打开 <https://suulnnka.github.io/AetherWebOS/> 启动「五子棋」应用 ——
 那里面跑的就是本引擎(窗口信息行实时显示搜索深度 / 评分 / 节点数 / 耗时)。
 
+## 在线对弈页(GitHub Pages)
+
+本仓库自带一个**开箱即玩的对弈页**:布局与交互取自 WebOS 的五子棋应用,
+同一份 Worker 契约接的也是本仓库的引擎 —— 纯 JS,alpha-beta 迭代加深,无禁 / 有禁双规则。每次推送由 GitHub Actions
+自动部署(`.github/workflows/deploy-pages.yml`):
+
+**<https://suulnnka.github.io/AetherRenju/>**
+
+页面即仓库布局:`index.html`(根)+ `pages/`(页面资产),引擎入口在 `src/`、
+wasm 在 `wasm/`,全部按相对路径引用 —— 本地预览无需构建,仓库根起任意静态
+服务器即可:
+
+```bash
+python3 -m http.server 8000     # 仓库根起服
+# 打开 http://localhost:8000/
+```
+
+功能与 WebOS 应用一致:新对局 / 难度(引擎自报表)/ 人机或双人 / 换边 / 悔棋
+(规则档无禁 / 有禁切换,黑方禁手点标 ×),底栏左侧行棋状态、右侧实时引擎搜索信息。
+
+
 > v0.1:规则完整(禁手判定与独立暴力判定器逐点对拍),搜索与评估都是
 > **第一版、刻意做简单**的。后续路线见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 
