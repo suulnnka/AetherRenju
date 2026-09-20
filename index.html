@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="AetherRenju 在线对弈:无禁(自由)与有禁(连珠)双规则、RIF 递归禁手判定的五子棋引擎,alpha-beta + 置换表搜索跑在 Web Worker">
+<meta name="description" content="AetherRenju 在线五子棋对弈:无禁(自由)与有禁(连珠)双规则、RIF 禁手判定、多档 AI 难度、悔棋">
 <title>五子棋 · AetherRenju</title>
 <link rel="stylesheet" href="./pages/style.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e2c288'/%3E%3Ccircle cx='16' cy='16' r='8' fill='%231f2937'/%3E%3C/svg%3E">
@@ -24,9 +24,8 @@
     <div class="win-body" id="app"></div>
   </section>
   <footer class="page-foot">
-    <span>AetherRenju — 无禁 / 有禁双规则 + RIF 禁手判定 + alpha-beta 迭代加深(纯 JS,跑在 Web Worker)</span>
-    <span class="sep">·</span>
     <a href="https://suulnnka.github.io/AetherWebOS/" target="_blank" rel="noopener">AetherWebOS 在线演示</a>
+    <span>五子棋 · AetherRenju · <a href="https://github.com/suulnnka" target="_blank" rel="noopener">suulnnka</a></span>
   </footer>
 </main>
 <dialog id="dlg">
