@@ -55,8 +55,9 @@ pub unsafe fn s() -> *mut Ctx {
     core::ptr::addr_of_mut!(S)
 }
 
-/* 墙上时间:wasm 从 JS 导入 performance.now();原生测试无时钟,
- * 预算以节点数为主,时间兜底自然不触发。 */
+/* 墙上时间:wasm 从 JS 导入 performance.now();原生用 std Instant
+ * (crate 仅在 wasm32 上 no_std)。原生此前无时钟、时间兜底不触发,
+ * 全靠节点预算;现在原生同样受毫秒预算约束。 */
 #[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "env")]
 extern "C" {
@@ -68,7 +69,11 @@ unsafe fn now_ms() -> f64 {
 }
 #[cfg(not(target_arch = "wasm32"))]
 unsafe fn now_ms() -> f64 {
-    0.0
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64() * 1000.0)
+        .unwrap_or(0.0)
 }
 
 #[inline]
@@ -222,7 +227,29 @@ pub unsafe fn tier_of(cell: usize, side: u8) -> i32 {
 
 /* ==================== 主搜索(PVS) ==================== */
 
-unsafe fn ab(side: u8, mut depth: i32, mut alpha: i32, beta: i32, ply: usize, prev: i32) -> i32 {
+/* 每路径威胁延伸预算(己方造四着不减层;沿路径递减防爆)。
+ * 运行时可调:对拍时同进程内让两种配置互弈。
+ * 默认 0 = 关闭:实测(原生 320 局)预算 6/12 在 10 万节点/手
+ * 下均为净负收益 —— qsearch + 根 VCT 已覆盖强制链,延伸挤占
+ * 主迭代深度;机制保留供后续更高节点预算下复测。 */
+pub static mut EXT_BUDGET: i32 = 0;
+
+/** 设置延伸预算(0 = 关闭延伸);返回旧值。 */
+pub unsafe fn set_ext_budget(b: i32) -> i32 {
+    let old = EXT_BUDGET;
+    EXT_BUDGET = b;
+    old
+}
+
+unsafe fn ab(
+    side: u8,
+    mut depth: i32,
+    mut alpha: i32,
+    beta: i32,
+    ply: usize,
+    prev: i32,
+    ext_left: i32,
+) -> i32 {
     (*s()).nodes += 1;
     if time_up() {
         return 0;
@@ -365,6 +392,11 @@ unsafe fn ab(side: u8, mut depth: i32, mut alpha: i32, beta: i32, ply: usize, pr
             (cell, tier, is_killer)
         };
         let forcing = tier >= 2;
+        /* 威胁延伸:己方造四着(tier≥3)不减层 —— 四威胁必被应答,
+         * 强制链窄;每路径预算控制四点密集局面的树膨胀。 */
+        let ext = tier >= 3 && ext_left > 0 && ply < 40;
+        let nd = depth - 1 + ext as i32;
+        let child_ext = ext_left - ext as i32;
 
         /* LMP:浅层非 PV 的安静着,试够阈值后整段放弃 */
         if any_legal
@@ -387,20 +419,28 @@ unsafe fn ab(side: u8, mut depth: i32, mut alpha: i32, beta: i32, ply: usize, pr
         if made_five(cell, (*s()).mode) {
             sc = MATE - ply as i32 - 1;
         } else if searched == 0 {
-            sc = -ab(side ^ 1, depth - 1, -beta, -alpha, ply + 1, cell as i32);
+            sc = -ab(side ^ 1, nd, -beta, -alpha, ply + 1, cell as i32, child_ext);
         } else {
             /* LMR:零窗口试探 → 全深零窗口 → 全窗口重搜 */
             let mut r = 0i32;
             if depth >= 3 && searched >= 3 && !forcing && !is_killer {
                 r = 1 + if depth >= 5 { 1 } else { 0 } + if searched >= 8 { 1 } else { 0 };
-                r = r.min(depth - 2).max(0);
+                r = r.min(nd - 1).max(0);
             }
-            let mut v = -ab(side ^ 1, depth - 1 - r, -alpha - 1, -alpha, ply + 1, cell as i32);
+            let mut v = -ab(
+                side ^ 1,
+                nd - r,
+                -alpha - 1,
+                -alpha,
+                ply + 1,
+                cell as i32,
+                child_ext,
+            );
             if !(*s()).aborted && r > 0 && v > alpha {
-                v = -ab(side ^ 1, depth - 1, -alpha - 1, -alpha, ply + 1, cell as i32);
+                v = -ab(side ^ 1, nd, -alpha - 1, -alpha, ply + 1, cell as i32, child_ext);
             }
             if !(*s()).aborted && v > alpha && v < beta {
-                v = -ab(side ^ 1, depth - 1, -beta, -alpha, ply + 1, cell as i32);
+                v = -ab(side ^ 1, nd, -beta, -alpha, ply + 1, cell as i32, child_ext);
             }
             sc = v;
         }
@@ -714,17 +754,22 @@ pub unsafe fn search_best(mode: i32, max_depth: i32, node_budget: u64, ms_budget
             while k < n {
                 let idx = order[k];
                 let cell = rm[idx] as usize;
+                /* 根处延伸与树内同规则(tier 随深度迭代被覆盖,逐手重算);
+                 * 根每轮只延伸首个强制着 */
+                let ext = EXT_BUDGET > 0 && tier_of(cell, side) >= 3;
+                let nd = depth - 1 + ext as i32;
+                let child_ext = EXT_BUDGET - ext as i32;
                 make(cell, side);
                 let sc;
                 if made_five(cell, mode) {
                     sc = MATE - 1;
                 } else if k == 0 {
-                    sc = -ab(side ^ 1, depth - 1, -b, -a, 1, cell as i32);
+                    sc = -ab(side ^ 1, nd, -b, -a, 1, cell as i32, child_ext);
                 } else {
                     /* 根 PVS:零窗口试探,failed-high 再全窗口确认 */
-                    let mut v = -ab(side ^ 1, depth - 1, -a - 1, -a, 1, cell as i32);
+                    let mut v = -ab(side ^ 1, nd, -a - 1, -a, 1, cell as i32, child_ext);
                     if !(*s()).aborted && v > a && v < b {
-                        v = -ab(side ^ 1, depth - 1, -b, -a, 1, cell as i32);
+                        v = -ab(side ^ 1, nd, -b, -a, 1, cell as i32, child_ext);
                     }
                     sc = v;
                 }

@@ -581,49 +581,71 @@ static mut AGG_CNT: [[i32; AGGS]; 2] = [[0; AGGS]; 2];
 static mut SUM: i32 = 0; // 空格黑方分总和
 static mut SUM_HIST: [i32; SIZE + 2] = [0; SIZE + 2];
 
-/** (r,c) 出界 → 0b00;空 0b11;黑 0b10;白 0b01。 */
+/* 填料棋盘:25×25,每格直存 2 位编码(0 墙 / 1 白 / 2 黑 / 3 空),
+ * 边框厚 5 恰好覆盖 ±H 走查 —— 半线打包变成无分支字节读。 */
+const PDIM: usize = N + 2 * MAXH;
+const POFF: usize = MAXH;
+const PSTRIDE: [usize; 4] = [1, PDIM, PDIM + 1, PDIM - 1];
+static mut PAD: [u8; PDIM * PDIM] = [0; PDIM * PDIM];
+
 #[inline]
-unsafe fn pair_bits(r: i32, c: i32) -> u32 {
-    if r < 0 || r >= N as i32 || c < 0 || c >= N as i32 {
-        return 0;
-    }
-    match p().bd[(r * N as i32 + c as i32) as usize] {
+fn pidx(cell: usize) -> usize {
+    (cell / N + POFF) * PDIM + cell % N + POFF
+}
+
+#[inline]
+fn code_of(bd_val: u8) -> u8 {
+    match bd_val {
         0 => 0b11,
         1 => 0b10,
         _ => 0b01,
     }
 }
 
-/** 沿方向 d 符号 s 的半线打包值(近端低位)。 */
+/** 内部镜像与 bd 同步(after_stone_change 入口调用;bd 已更新)。 */
 #[inline]
-unsafe fn pack_half(cell: usize, d: usize, sgn: i32, h: usize) -> u32 {
-    let (r, c) = (cell / N, cell % N);
-    let mut bits = 0u32;
-    let mut k = 1usize;
-    while k <= h {
-        let (rr, cc) = (
-            r as i32 + DR[d] * sgn * k as i32,
-            c as i32 + DC[d] * sgn * k as i32,
-        );
-        bits |= pair_bits(rr, cc) << (2 * (k - 1));
-        k += 1;
-    }
-    bits
+unsafe fn pad_sync(cell: usize) {
+    *(core::ptr::addr_of_mut!(PAD) as *mut u8).add(pidx(cell)) = code_of(p().bd[cell]);
 }
 
-/** 查半线对表:cell 方向 d 的(黑线形,白线形)。 */
+/** 空盘镜像重置(墙 0,内区全空 3)。 */
+unsafe fn pad_clear() {
+    let pad = core::ptr::addr_of_mut!(PAD) as *mut u8;
+    let mut r = 0usize;
+    while r < N {
+        let mut c = 0usize;
+        while c < N {
+            *pad.add((r + POFF) * PDIM + c + POFF) = 0b11;
+            c += 1;
+        }
+        r += 1;
+    }
+}
+
+/** 查半线对表:cell 方向 d 的(黑线形,白线形)。近端在低位。 */
 #[inline]
 unsafe fn line_kinds(cell: usize, d: usize, h: usize) -> u8 {
-    let left = pack_half(cell, d, -1, h) as usize;
-    let right = pack_half(cell, d, 1, h) as usize;
+    let pad = core::ptr::addr_of!(PAD) as *const u8;
+    let stride = PSTRIDE[d];
+    let base = pidx(cell);
+    let (mut lo, mut hi) = (0usize, 0usize);
+    let mut k = 1usize;
+    while k <= h {
+        let sh = 2 * (k - 1);
+        let l = *pad.add(base - stride * k) as usize;
+        let r = *pad.add(base + stride * k) as usize;
+        lo |= l << sh;
+        hi |= r << sh;
+        k += 1;
+    }
     if MODE == RENJU {
         let slot = core::ptr::addr_of!(SLOT_R) as *const u16;
         let table = core::ptr::addr_of!(LINE_R) as *const u8;
-        *table.add(*slot.add(left) as usize * SLOTS_R + *slot.add(right) as usize)
+        *table.add(*slot.add(lo) as usize * SLOTS_R + *slot.add(hi) as usize)
     } else {
         let slot = core::ptr::addr_of!(SLOT_F) as *const u16;
         let table = core::ptr::addr_of!(LINE_F) as *const u8;
-        *table.add(*slot.add(left) as usize * SLOTS_F + *slot.add(right) as usize)
+        *table.add(*slot.add(lo) as usize * SLOTS_F + *slot.add(hi) as usize)
     }
 }
 
@@ -677,6 +699,7 @@ unsafe fn refresh_cell(cell: usize, h: usize) {
 /** 空盘全量(bd 已清空)。 */
 pub unsafe fn reset() {
     ensure_init();
+    pad_clear();
     let h = half_len();
     AGG_CNT = [[0; AGGS]; 2];
     SUM = 0;
@@ -717,6 +740,7 @@ unsafe fn apply_dir_change(t: usize, d: usize, new: u8) {
 /** 落子/提子后(bd 已更新)维护:重算四向 ±H 线内空格,
  *  再按方向增减走子格冻结的自身贡献。added = 落子。 */
 pub unsafe fn after_stone_change(cell: usize, added: bool) {
+    pad_sync(cell);
     let h = half_len();
     let (r, c) = (cell / N, cell % N);
     for d in 0..4 {
