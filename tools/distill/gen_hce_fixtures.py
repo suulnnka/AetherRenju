@@ -8,7 +8,7 @@ from dataset.distillgen import load_distillgen_file
 import numpy as np
 
 Rapfi = '/home/a/renju/rapfi/Rapfi/build/distill/pbrain-rapfi'
-Model = '/home/a/renju/rapfi/Networks/classical/model220723.bin'
+Model = sys.argv[1] if len(sys.argv) > 1 else '/home/a/renju/rapfi/Networks/classical/model220723.bin'
 
 def moves_of_game(boards):
     """consecutive board ternaries -> move cell list(boards[0] 为空盘)"""

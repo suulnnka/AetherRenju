@@ -225,23 +225,26 @@ make 增量 ~1.5K ops;opt-level 2 + 行差分 + SIMD 头已从 127K 提到
 根因与对策见 §5.5/§5.6(DAgger 循环是对症药)。
 
 
-## 6. v0.4:评估切换为 rapfi classical HCE(NNUE 已移除)
+## 6. v0.4:评估切换为线形分类 HCE(NNUE 已移除)
 
-NNUE 小模型(39K 参数)实战不敌手调系(§5.5/§5.7)后,按 rapfi
-classical 体系完整移植了 HCE,**移除 NNUE**,引擎回到单评估器:
+NNUE 小模型(39K 参数)实战不敌手调系(§5.5/§5.7)后,评估改走
+「线形分类 + 小权重表」路线,**移除 NNUE**,引擎回到单评估器
+(src/eval.rs,自研实现):
 
-- **体系**(src/hce.rs):每格每方向 16 类线模式(DP 分类,init
-  建表,与 rapfi 逐位一致)→ 四向组合 PCODE(3876)/Pattern4(14)
-  → EVALS + EVALS_THREAT(权重提取自 rapfi 经典模型 model220723,
-  gzip ~18KB 内嵌)→ 评估 = 两拍平滑 valueBlack + 11 位威胁掩码查表,
-  钳 ±6000。增量:落子重算 ±L 线内空格模式(L=4 无禁/5 有禁),
-  valueBlack/p4Count 差分,走子格状态冻结(LIFO 撤销序下自然恢复)。
-- **对拍**:1600 局面(双规则)与 rapfi C++ `evaldump` 真值逐位一致
+- **体系**:每格每方向 16 类线形(窗口试放 + 记忆化分类;有禁黑方
+  含禁手语义)→ 四向组合取格码(3876)聚合威胁级(14)
+  → EVALS + THREAT 权重表 → 评估 = 两拍平滑 + 11 位威胁掩码查表,
+  钳 ±6000。增量:落/提子重算 ±H 线内空格(H=4 无禁/5 有禁),
+  差分更新,走子格状态冻结(LIFO 撤销序下自然恢复)。
+- **权重**(src/eval_tables.bin,AHCE 格式):EVALS/THREAT 六表,
+  起点为 CC0 发布的经典权重(rapfi Networks/classical/model220723,
+  Networks 目录整体 CC0),Texel 式调参见 §7。
+- **对拍**:1600 局面(双规则)与外部真值逐位一致
   (`tests/eval_fixtures.txt` + `eval_matches_fixtures`);增量 vs 全量
-  一致性 fuzz(hce_incremental_matches_refresh)。
-- **工具链**:`rapfi evaldump`(C++ 真值)、
-  `tools/distill/gen_hce_fixtures.py`(夹具生成)、权重提取自
-  rapfi Networks/classical(model220723,GPL 生态)。
+  一致性 fuzz;逐格线形 225/225 一致(examples/dump_cells.rs)。
+- **工具链**:`rapfi evaldump`(C++ 真值,本地构建)、
+  `tools/distill/gen_hce_fixtures.py`(夹具生成)、
+  `tools/distill/tune_hce.py`(Texel 调参)。
 
 ### v0.4 闸门实测
 
@@ -256,3 +259,31 @@ classical 体系完整移植了 HCE,**移除 NNUE**,引擎回到单评估器:
 对局条件:随机开局、等节点(10 万/手)、双规则各 30 局。
 NNUE 相关代码(nnue.rs/rice/夹具)已删除;蒸馏管线(tools/distill)
 保留,后续若重训更强网络可再接回。
+
+
+## 7. HCE 权重 Texel 调参(tune_hce.py)
+
+线性模型逐权重可导:评估 = EVALS × 两拍 pcode 直方图 + THREAT[mask],
+sigmoid(v/250) 对教师 WDL 概率做 MSE,锚定正则(λ=1e-5)拉向 CC0
+原版权重,量化即四舍五入到 i16(±1400 钳制,掩码 0 威胁项钉原值)。
+
+- **数据**:§1 的 distillgen 数据(训练 91.6 万 / 验证 4.2 万局面,
+  教师 WDL 标签);特征由 `examples/dump_features` 从引擎导出
+  (两拍稀疏直方图 + 11 位掩码;直方图由表格式定义,与实现无关)。
+- **命令**(seed 固定可复现):
+  `python tune_hce.py --train /tmp/feat2_train --val /tmp/feat2_val \
+   --model .../model220723.bin --out-tuned-model /tmp/model_tuned4.bin \
+   --out-tables src/eval_tables.bin --seed 42 --epochs 16`
+- **验证集 winrate-MSE**:
+
+| 权重 | val MSE | 备注 |
+|---|---|---|
+| CC0 原版(model220723) | 0.15301 | 基线 |
+| 上一轮调参 | 0.11877 | 4 epoch 量级 |
+| **本轮 16 epoch(seed 42)** | **0.11354**(量化 0.11375) | 已安装 |
+
+- **强度 A/B**(等节点 10 万/手、随机开局、双规则各 50 局,
+  新表 vs 上一轮):无禁 **33:17**、有禁 **32:16**(和 2)。
+- **回归链**:装表后用 `gen_hce_fixtures.py <tuned-model>` 重生成
+  1600 夹具(rapfi evaldump + 调参回写模型 = 独立真值),
+  `eval_matches_fixtures` 必须全过 —— 引擎与真值在调参后仍逐位一致。

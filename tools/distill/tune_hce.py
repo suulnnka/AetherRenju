@@ -95,7 +95,13 @@ def main():
     ap.add_argument('--freeze-threat', action='store_true',
                     help='威胁表全冻结(教师概率标签会把决胜项压软,只调 EVALS)')
     ap.add_argument('--subsample', type=int, default=500000)
+    ap.add_argument('--seed', type=int, default=0,
+                    help=' 固定随机种子(子采样 + 批序),结果可复现;0 = 不固定')
     args = ap.parse_args()
+
+    if args.seed:
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print('device:', device)
