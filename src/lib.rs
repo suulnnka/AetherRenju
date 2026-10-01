@@ -112,8 +112,8 @@ pub const WCELLS: [u16; NW * 5] = gen_windows().0;
 pub const CW: [u16; SIZE * 20] = gen_windows().1;
 pub const CWCOUNT: [u8; SIZE] = gen_windows().2;
 
-/* 窗分权重:仅用于走法排序的落点增益(point_score),评估已交由
- * NNUE(nnue.rs);混色 0 分、纯黑 +W[b]、纯白 −W[w]。
+/* 窗分权重:仅用于走法排序的落点增益(point_score),静态评估在
+ * eval.rs(线形分类 + 权重表);混色 0 分、纯黑 +W[b]、纯白 −W[w]。
  * W[5]/W7[6] 是终局瞬态钳制值,保证 make/unmake 增量对称。 */
 pub const W: [i32; 6] = [0, 4, 36, 320, 2800, 1200000];
 pub const W7: [i32; 7] = [0, 4, 36, 320, 2800, 1200000, 1200000];
