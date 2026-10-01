@@ -1,162 +1,156 @@
 # AetherRenju
 
-纯 JavaScript 五子棋 / 连珠引擎:零依赖、无 DOM、浏览器 / Worker / Node 通用。
-为 [WebOS](https://github.com/suulnnka/AetherWebOS)(纯前端网页操作系统)的
-五子棋应用而写,全部自研。
+连珠 / 五子棋引擎:**Rust 编写,编译为 WebAssembly**,浏览器 Worker 里跑。
+为 [WebOS](https://github.com/suulnnka/AetherWebOS) 的五子棋应用而写,规则、
+搜索与评估全部自研。
 
-**在线体验:** 打开 <https://suulnnka.github.io/AetherWebOS/> 启动「五子棋」应用 ——
-那里面跑的就是本引擎(窗口信息行实时显示搜索深度 / 评分 / 节点数 / 耗时)。
+**在线体验:** 打开 <https://suulnnka.github.io/AetherRenju/> 开箱即玩;
+WebOS 里的「五子棋」应用跑的也是本引擎。
 
-## 在线对弈页(GitHub Pages,免 CI)
+## v0.2:Rust + WebAssembly 重写
 
-本仓库自带一个**开箱即玩的对弈页**:布局与交互取自 WebOS 的五子棋应用,
-同一份 Worker 契约接的也是本仓库的引擎 —— 纯 JS,alpha-beta 迭代加深,无禁 / 有禁双规则。**没有构建、没有 CI**:站点即仓库本身,GitHub Pages 原样引用仓库文件直接出页面:
+v0.1 是纯 JS 单文件引擎;v0.2 起引擎本体用 Rust 重写并编译为 wasm,
+旧 `src/engine.js` 已删除。**Worker 消息契约逐字兼容** —— `pages/app.js`
+与 WebOS 应用侧零改动,只是引擎的门面从 JS 换成了 wasm:
 
-**<https://suulnnka.github.io/AetherRenju/>**
+| | v0.1(JS) | v0.2(Rust → wasm) |
+|---|---|---|
+| 引擎产物 | `src/engine.js` | `wasm/aether_renju.wasm` |
+| gzip 体积 | ~11 KB(预算 35 KB) | **~19 KB(预算 70 KB)** |
+| 搜索 | negamax α-β + 迭代加深 + TT + killer/history | + PVS、期望窗口、双槽 TT、LMR/LMP/IIR、连续历史、**根 VCT 证明搜索** |
+| 实测 NPS(安静中盘) | 20~29 万 | **32~52 万** |
+| 规则 / 禁手 | RIF 递归禁手 + 暴力对拍 | 完整移植,对拍金标准不变 |
 
-页面即仓库布局:`index.html`(根)+ `pages/`(页面资产),引擎入口在 `src/`、
-wasm 在 `wasm/`,全部按相对路径引用 —— 本地预览无需构建,仓库根起任意静态
-服务器即可:
-
-```bash
-python3 -m http.server 8000     # 仓库根起服
-# 打开 http://localhost:8000/
-```
-
-线上开启只需一次:仓库 **Settings → Pages → Build and deployment → Source 选
-「Deploy from a branch」,Branch 选默认分支 + `/(root)`**;此后每次推送自动更新,
-不走任何 Actions。
-
-功能与 WebOS 应用一致:新对局 / 难度(引擎自报表)/ 人机或双人 / 换边 / 悔棋
-(规则档无禁 / 有禁切换,黑方禁手点标 ×),底栏左侧行棋状态、右侧实时引擎搜索信息。
-
-
-> v0.1:规则完整(禁手判定与独立暴力判定器逐点对拍),搜索与评估都是
-> **第一版、刻意做简单**的。后续路线见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+取舍:学习型大网络评估放不进 70 KB 预算,评估走「线形分类 + 小权重表」
+路线(16 类线形 × 4 向组合,权重表 gzip 后内嵌,详见 `src/eval.rs`);
+搜索侧(PVS / 期望窗口 / 双槽 TT / 威胁门控 LMR / 威胁分级排序 /
+连续历史 / 根 VCT)按节点预算为主的可复现性约束收敛。
 
 ## 规则:无禁与有禁
-
-引擎同时支持两套规则,搜索 / 合法着法 / 胜负判定都按 `mode` 走:
 
 | 模式 | 胜负 | 黑方限制 |
 |---|---|---|
 | `FREE` 无禁(自由五子棋) | 任意一方连成 **≥5 子**即胜(长连也算) | 无 |
 | `RENJU` 有禁(连珠) | 黑方**恰好五连**才胜;白方五连或长连都胜 | 长连 / 双四 / 双活三判负(引擎把它们当非法着法,不生成、不搜索) |
 
-禁手判定按 RIF《连珠规则》递归展开(`isForbidden` 顶部注释有完整推导):
-
-- **长连**:六子及以上。
-- **四**:补一子能成「恰好五」的形状;同一方向按成五窗的 4 子集合去重
-  (活四的两个成五点算同一个四);单线双四(`●●●_x_●●●`)照样识别。
-- **三**:存在空点 p,补 p 后出现「过 x 且过 p 的活四」,且补 p 这手
-  **本身不成五、不是禁手**(递归)—— 这就是「假活三不算三」的官方口径。
-- **五连豁免**:同时成五则一切禁手豁免(黑直接获胜)。
+禁手判定按 RIF《连珠规则》递归展开(`src/lib.rs` 的 `is_forbidden` 注释有
+完整推导):长连、四(成五窗子集去重,单线双四照样识别)、三(补点递归判定,
+假活三不算三)、五连豁免一切禁手。
 
 ## 棋盘与编码
 
-- 15×15 = 225 点,`idx = 行×15 + 列`;黑先白后,「着法」就是一个点 idx,
-  UI 与 Worker 之间只传这一种编码,不搞两套。
-- 格值:0 空 / 1 黑 / 2 白;方:0 黑 `BLACK` / 1 白 `WHITE`。
-- 模式:`FREE = 0`(无禁)/ `RENJU = 1`(有禁)。
+- 15×15 = 225 点,`idx = 行×15 + 列`;黑先白后。
+- 格值 0 空 / 1 黑 / 2 白;模式 `FREE = 0` / `RENJU = 1`。
+- UI 与 Worker 之间只传落点序列一种编码,不搞两套。
 
-## 引擎
+## 架构
 
-`src/engine.js` 单文件(规则 + 评估 + 搜索),`src/worker.js` 只是 Worker 薄壳。
-置换表、killer、history、候选缓冲全是模块级 `TypedArray`,搜索过程**零分配**;
-评估是 4 个方向 572 个「五元窗」的计数和,随 make/unmake **增量维护**,叶节点 O(1) 取值。
+```
+Rust(crate aether-renju,wasm32 上 no_std、零动态分配)
+├── src/lib.rs      规则核心:增量棋盘 / RIF 递归禁手
+├── src/eval.rs     静态评估:16 类线形分类 + 格码权重表 + 威胁掩码
+├── src/search.rs   PVS 迭代加深 + 期望窗口 + 双槽置换表 + LMR/LMP/IIR
+│                   + 威胁分级排序 + killer/history/连续历史 + 静态搜索
+├── src/vct.rs      根 VCT 证明搜索(AND-OR,负结论专用 TT,反击四修正)
+├── src/opening.rs  26 开局名表 + 开局策略(前三手 trivial
+│                   bestmove 直接出着不走搜索;搜索阶段不读开局库)
+├── src/api.rs      原始 C ABI 导出(不用 wasm-bindgen,体积最小)
+└── src/worker.js   Worker 门面:加载 wasm,消息契约与旧版逐字兼容
+```
 
-### 搜索(当前实际用了这些)
+### 搜索清单(当前实际用了这些)
 
-| 技术 | 现状 |
+| 技术 | 说明 |
 |---|---|
-| negamax + alpha-beta | 有,但**全窗口** —— 还没做 PVS 零窗口试探 |
-| 迭代加深 | 1..depth,每层回调 `onProgress` |
-| 置换表 | 2^17 项;双 32 位 Zobrist 校验;存 着法/分数/深度/flag;总是替换 |
-| 着法排序 | 候选点增益(落点导致的全盘窗分变化,攻防一体)→ TT 着法 → killer → history |
-| 静态搜索 | **VCF 式分级**:己方有成五点直接取胜;对方叫五只许挡(不挡必输);否则才允许自己成四叫杀;链深限 14 ply |
-| 禁手 | 懒判定:轮到尝试该点才查,配 (盘面⊕点) 键的小缓存;候选区全被禁死 = 判负 |
-| 杀棋 | 每次走子后查成五,立即返回 `MATE - ply - 1`,不再递归 |
-| 中断 | 节点预算为主,每 1024 节点查一次墙上时间作兜底 |
-
-**还没做**(见 ROADMAP):PVS、空着裁剪、LMR、威胁空间搜索(VCT)、开局库。
+| PVS + 迭代加深 | 首着全窗口,其余零窗口 + 条件重搜 |
+| 期望窗口 | 深度 ≥3 用上轮分 ±240 窗,失败倍增扩窗 |
+| 置换表 | 2^16 桶双槽(depth-preferred + always-replace 下压),每步清零 |
+| LMR(威胁门控) | 安静着才减排;威胁着 / killer 永不减排 |
+| LMP / IIR | 浅层安静着计数剪枝 / TT 未命中深节点减层 |
+| 着法排序 | 威胁分级 → 增益 → killer → history → 连续历史 |
+| 静态搜索 | 己方成五点 → 对方叫五必堵 → 己方成四叫杀 |
+| 根 VCT | 1/8 预算 AND-OR 证明(深度 12),防守集含反击四,证明即报杀 |
+| 预算 | 节点预算为主(可复现),墙上时间兜底 |
 
 ### 评估
 
-五元窗计数:每个窗按「黑子数 b / 白子数 w」计分,混色 0 分、纯黑 `+W[b]`、
-纯白 `-W[w]`,权重 `[0, 4, 36, 320, 2800, 1200000]` 为手调初值
-(活四 > 冲四、活三 > 眠三的层次靠窗的重叠自然拉)+ tempo 8。
-**没有**自对弈拟合 / Texel 调参。
+线形分类(`src/eval.rs`):每格每方向判 16 类线形(死形/长连/眠活一二三
+四/成五,有禁黑方含禁手语义),四向排序取格码查权重表,叠加双方威胁
+掩码修正,相邻两手平滑;分类器窗口试放 + 记忆化,增量维护只重算落子
+±5 线内空格,叶节点 O(1)。权重表(CC0 数据,Texel 式调参)内嵌
+`src/eval_tables.bin`。
 
-### 难度四档
+### 难度四档(参数由 wasm 引擎自报,Worker 只补 UI 文案)
 
-节点预算为主、墙上时间为兜底(设备无关、可复现);初级另加 root jitter。
-下表的「深度」是 `LEVELS[].depth` 上限,**实测**(`bench/bench.mjs nps`,
-安静中盘局面,本机 Node 22 / 桌面级 CPU)预算内能稳定走完 2~4 层
-(杀棋局面靠静态搜索延伸,远快于此):
+初级(深度 2 / 8k 节点,±60 分随机)、中级(4 / 40k)、高级(6 / 200k,
+默认档)、大师(8 / 600k,预算内可到 7 层 + VCT 延伸)。
 
-| 档位 | 深度上限 | 节点预算 | 实测 NPS |
-|---|---|---|---|
-| 初级 | 2 | 8k(最优解 ±60 分内随机) | ~9 万 |
-| 中级 | 4 | 40k | ~20 万 |
-| 高级 | 6 | 200k | ~21 万 |
-| 大师 | 8 | 600k | ~29 万 |
+## 构建与体积
 
-## 用法
-
-```js
-import {
-  BLACK, WHITE, FREE, RENJU, MATE,
-  newBoard, sideToMove, make, unmake,
-  legalMoves, isForbidden, forbiddenPoints, checkWin, madeFive,
-  replayMoves, searchBest, LEVELS,
-} from './src/engine.js';
-
-const bd = newBoard();                          // 空盘,黑先
-console.log(sideToMove(bd) === BLACK);          // true
-
-make(bd, 7 * 15 + 7, BLACK);                    // 黑下天元
-const fbd = forbiddenPoints(bd);                // 有禁模式下黑方禁手点(UI 画 × 用)
-const win = checkWin(bd, 7 * 15 + 7, FREE);     // 成五返回整条连线,否则 null
-
-const r = searchBest(bd, WHITE, {
-  mode: RENJU,
-  ...LEVELS[2],
-  onProgress: (i) => console.log(i.depth, i.move, i.score),
-});
-// r = { move, score, depth, nodes, ms, mate, draw, only }
-make(bd, r.move, WHITE);                        // 走子;撤销用 unmake(bd, cell, side)
+```bash
+cargo build --release --target wasm32-unknown-unknown   # 或 ./scripts/build.sh
+npm run build        # 构建 + 拷贝到 wasm/ + 体积闸门
+npm run size         # 单独跑体积闸门
 ```
 
-Worker 侧收 `{ id, moves, mode, nodes, ms, depth, jitter }`,回
-`{ id, move, depth, nodes, ms, score, mate }`;`moves` 是从空盘起的落点序列,
-Worker 自己重演棋盘(结构化克隆最省,且不会有两份规则实现)。
+体积闸门(`scripts/check-size.mjs`):**引擎 wasm gzip 后 ≤ 70 KB**,
+当前实测约 19 KB。手段:wasm32 上 `no_std` + 全静态缓冲(线性内存不
+增长)+ 原始 C ABI(不用 wasm-bindgen)+ `opt-level=z` / LTO / `panic=abort`;
+置换表等大数组全零初始化,不占文件体积。
 
 ## 测试与基准
 
 ```bash
-npm test                          # 规则用例 + 禁手用例 + 对拍模糊 + 状态一致性 + 搜索行为 + 随机对局
-node bench/bench.mjs nps          # 各档位节点速度
-node bench/bench.mjs moves        # 固定深度最佳着法(改搜索/改评估后对拍)
-node bench/bench.mjs forbidden    # 禁手判定吞吐(全盘标禁手点场景)
+npm test                 # cargo test(Rust 侧全量)+ node 冒烟(wasm ABI + Worker 契约)
+npm run bench            # 各档位节点速度
+npm run bench:moves      # 固定深度最佳着法(改搜索/评估后对拍)
+npm run bench:forbidden  # 禁手标记吞吐
 ```
 
-**禁手判定的金标准是测试里的独立暴力判定器**:按 RIF 定义逐点枚举、零增量、
-零共享缓冲,与引擎的增量实现在随机局面(60 局 × 全部空点)上逐点对拍,
-必须完全一致;另有 20 个手工构造的禁手用例(长连 / 双四 / 单线双四 / 双三 /
-假活三 / 递归假活三 / 五连豁免 / 四三豁免 / 边角……)。
+**禁手判定的金标准**是 Rust 测试里的独立暴力判定器(`tests/engine.rs`):
+按 RIF 定义逐点枚举、零增量、零共享缓冲,与引擎的增量实现在随机局面上
+逐点对拍,必须完全一致;另有 20 个手工构造的禁手用例(长连 / 双四 /
+单线双四 / 双三 / 假活三 / 递归假活三 / 五连豁免 / 边角……)。
+其余:胜负对拍、make/unmake 状态一致性、重演一致性、perft、随机对局
+(双模式)、VCT 强制胜、api 层 state/search 输出、26 开局表与形状匹配
+(独立几何实现穷举 184 个合法位形对拍,`tests/opening.rs`)。
 
-随机对局模糊测试(双模式各 15 局)验证:胜负与暴力一致、序列可被 Worker 重演、
-make/unmake 完整还原全部增量状态、重放与增量重建逐位一致。
+## Worker 契约(v0.1 起不变;`opening` 为后加的可选字段)
 
-## 已知不做(v0.1 的边界)
+- `ping` → `{type:'pong', tag}`
+- `{type:'levels'}` → `{type:'levels', tag, engine, default, levels}`
+- `{type:'state', id, moves, mode}` → `{type:'state', id, board, stm, forbidden, over, winner, cells, reason, opening?}`(非法序列 → `error:'illegal-sequence'`)
+- `{id, moves, mode, level}` → `{id, move, depth, nodes, ms, score, mate, book}`
 
-- **开局库 / 残局库** —— 不内置任何着法表,开局一律进搜索
+`moves` 是从空盘起的落点序列(黑白交替);搜索是同步的,UI 用请求序号
+丢弃过期结果,需要真正中断时 terminate 再造。
+
+`book = true` 的着法来自**开局策略**(trivial bestmove:前三手
+且位形在 26 开局域内 —— 空盘天元 / 一子紧邻 / 两子在 5×5 区内 ——
+直接给点不走搜索,`depth`/`nodes` 为 0,选点在合法开局形状内随机,
+随机源是 `env.now`);书外位形自动回退搜索,`ar_book_enable(0)` 可关
+(基准用,让前三手也走搜索)。
+
+`state` 回包的 `opening`(可选):前三手命中连珠 26 开局时的开局名
+(如 `'花月'`),字段三手起整局携带;UI 在**盘面 ≤5 手**(开局阶段)
+时把它与引擎搜索信息同栏显示 ——「开局库 · 花月 · 高级 · 深度 6 ·
+84k 节点 · 300ms · +12」,第 6 手起隐藏;策略着法无统计时只显示
+「开局库 · 花月」。引擎导出 `ar_opening` + `ar_opening_name_ptr/len`,
+名字零拷贝,协议形态参考 AetherOthello 的开局书门面;数据来源见
+`book/README.md`。
+
+## 已知不做(v0.2 的边界)
+
+- **评估型开局书 / 残局库** —— 不内置任何带估值/最佳着法的着法表;
+  开局只有策略着法(前三手在 26 开局域内随机选型,trivial
+  bestmove,见 `src/opening.rs` 与 `book/README.md`)
 - **RIF 26 种开局规则**(索索夫等 swap 体系)—— 只做自由开局 + 禁手
-- **多线程** —— 单线程到底
-- **WASM** —— 暂未启动,等 JS 侧优化到头再评估
-
-> 体积预算 35 KB gzip(与 AetherChess / AetherXiangqi 同档),由 WebOS 侧
-> `tools/check-size.mjs` 在 `npm run build` 时拦;当前约 11 KB。
+  (26 开局会**认名**,但不强制开局区的落子限制;策略着法只约束
+  AI 自己的前三手)
+- **多线程** —— 单线程到底(wasm 里也最省体积)
+- **NNUE / 学习型评估** —— 70 KB 预算装不下,评估保持手工窗分
+- 历史路线图见 `docs/ROADMAP.md`(其中 P0/P1 的 PVS、期望窗口、TT 深度
+  优先替换、VCT 已在 v0.2 落地;空着裁剪、LMR 调参等仍开放)
 
 ## License
 

@@ -1,0 +1,22 @@
+[package]
+name = "aether-renju"
+version = "0.2.0"
+edition = "2021"
+description = "五子棋 / 连珠引擎(Rust → WebAssembly):无禁与有禁双规则、RIF 递归禁手、PVS 迭代加深 + 置换表 + VCT 证明搜索"
+license = "MIT"
+
+[lib]
+name = "aether_renju"
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+# wasm 构建零依赖(no_std),体积优先
+[dependencies]
+
+
+[profile.release]
+opt-level = 2
+lto = true
+panic = "abort"
+strip = true
+codegen-units = 1

@@ -134,6 +134,9 @@ let humanSide = BLACK;                // 玩家执子方(换边可改);棋盘对
 let mode = RENJU;                     // FREE 无禁 / RENJU 有禁
 let hist = [];                        // 落点序列 —— UI 持有的唯一对局状态
 let lastMove = null;
+let openingName = null;               // 26 开局名(state 回包;书外为 null)
+let engineInfo = '';                  // 最近一次引擎搜索信息(renderInfo 拼行用)
+let bookMove = false;                 // 最近一次 AI 着法是否开局策略所出(无搜索统计)
 let winLine = null;                   // 胜利连线(高亮)
 let gameOver = false;
 let vsAI = true;
@@ -158,7 +161,9 @@ const popEndDlg = (show) => {
 const statusL = el('span', {}, '黑方行棋');
 const infoL = el('span', {
   class: 'mono', style: { fontSize: '11px' },
-  title: '引擎搜索信息(评分是 AI 视角,单位窗分;+M / -M 表示算到杀棋)',
+  title: '引擎搜索信息(评分是 AI 视角,单位窗分;+M / -M 表示算到杀棋);'
+    + '前三手是开局策略着法(不走搜索,无统计);'
+    + '前 5 手命中 26 开局时冠「开局库 · 开局名」',
 }, '');
 const layerEl = el('div', { class: 'gk-layer' });
 const boardEl = el('div', { class: 'gk-board' }, layerEl);
@@ -237,6 +242,8 @@ function applyState(d) {
   board = d.board;
   bans = new Set(d.forbidden);
   turn = d.stm;
+  openingName = d.opening || null;
+  renderInfo();
   if (d.over) {
     if (d.reason === 'full') endDraw();
     else if (d.reason === 'no-legal') endGame(d.winner, null, 'no-legal');
@@ -286,7 +293,7 @@ function killWorker() {
 }
 
 /** 作废在途请求(局面已变 / 页面关闭),免得过期着法落到新对局上 */
-function abortEngine() { killWorker(); infoL.textContent = ''; }
+function abortEngine() { killWorker(); engineInfo = ''; bookMove = false; renderInfo(); }
 
 function ensureWorker() {
   if (worker) return worker;
@@ -327,7 +334,10 @@ function onEngineMsg(e) {
   hist.push(d.move);
   lastMove = d.move;
   turn ^= 1;
-  showInfo(d);
+  /* 开局策略着法:无搜索统计,信息行只保留开局库标注(state 回包
+   * 落地后 renderInfo 会补上开局名) */
+  if (d.book) { engineInfo = ''; bookMove = true; renderInfo(); }
+  else showInfo(d);
   fetchState();
 }
 
@@ -365,7 +375,8 @@ function thinkAI() {
   render();
   statusL.textContent = `${sideName(aiSide())}思考中…`;
   setTitle(`五子棋 — AI 思考中(${lvName()})`);
-  infoL.textContent = '';
+  engineInfo = '';
+  renderInfo();
   if (typeof Worker === 'undefined') {
     searching = false;
     statusL.textContent = '当前环境不支持 Web Worker,AI 不可用';
@@ -375,10 +386,23 @@ function thinkAI() {
   worker.postMessage({ id: ++reqSeq, moves: hist.slice(), mode, level: levelIdx });
 }
 
-/** 底栏右侧的引擎信息行(等宽字体) */
+/** 底栏右侧的引擎信息行(等宽字体)。前 5 手的开局信息与引擎搜索
+ *  信息同栏:26 开局命中(盘面 ≤5 手)冠「开局库 · 名」;开局策略
+ *  开局策略着法(trivial bestmove,不走搜索)没有统计,只标
+ *  「开局库」—— 待第 3 手后补上开局名。 */
+function renderInfo() {
+  const name = openingName && hist.length >= 3 && hist.length <= 5 ? openingName : '';
+  const book = (name || (bookMove && hist.length <= 5))
+    ? `开局库${name ? ' · ' + name : ''}` : '';
+  infoL.textContent = engineInfo ? (book ? `${book} · ` : '') + engineInfo : book;
+}
+
+/** 引擎搜索结果写入信息行缓存并重画(深度/节点/耗时/评分) */
 function showInfo(d) {
-  infoL.textContent = `${lvName()} · 深度 ${d.depth} · `
+  bookMove = false;
+  engineInfo = `${lvName()} · 深度 ${d.depth} · `
     + `${Math.round(d.nodes / 1000)}k 节点 · ${d.ms}ms · ${fmtScore(d.score)}`;
+  renderInfo();
 }
 
 /* ---------- 工具栏动作 ---------- */

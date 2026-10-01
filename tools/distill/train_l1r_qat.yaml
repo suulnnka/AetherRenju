@@ -1,0 +1,42 @@
+# QAT fine-tune of aetherl1r from the f32 checkpoint (deploy-exact fake quant)
+rundir: /home/a/renju/AetherRenju/tools/distill/runs/l1r_qat_v1
+load_from: /home/a/renju/AetherRenju/tools/distill/runs/l1r_f32_v1/ckpt_aetherl1r_h16_0040000.pt
+train_datas:
+  - /home/a/renju/AetherRenju/tools/distill/data/fs_bal_train.bin
+  - /home/a/renju/AetherRenju/tools/distill/data/fs_nat_train.bin
+  - /home/a/renju/AetherRenju/tools/distill/data/rj_bal_train.bin
+  - /home/a/renju/AetherRenju/tools/distill/data/rj_nat_train.bin
+val_datas:
+  - /home/a/renju/AetherRenju/tools/distill/data/fs_bal_val.bin
+  - /home/a/renju/AetherRenju/tools/distill/data/fs_nat_val.bin
+  - /home/a/renju/AetherRenju/tools/distill/data/rj_bal_val.bin
+  - /home/a/renju/AetherRenju/tools/distill/data/rj_nat_val.bin
+dataset_type: distillgen_binary
+dataset_args:
+  apply_symmetry: true
+model_type: aetherl1rq
+model_args:
+  board_size: 15
+  line_len: 7
+  hidden: 16
+  screlu_clamp: 16.0  # unused by the quantized forward (CF/CH constants rule)
+optim_type: adamw
+optim_args:
+  betas: [0.9, 0.999]
+learning_rate: 0.0003
+weight_decay: 0.01
+lr_scheduler_type: step
+lr_scheduler_args:
+  step_size: 6000
+  step_gamma: 0.5
+loss_type: MSE+NONE
+iterations: 15000
+batch_size: 2048
+num_worker: 0
+random_seed: 42
+log_interval: 100
+show_interval: 500
+avg_loss_interval: 500
+save_interval: 5000
+temp_save_interval: 2500
+val_interval: 2500

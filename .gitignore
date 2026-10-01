@@ -1,4 +1,9 @@
 node_modules/
 dist/
+target/
 *.log
 .dbg*.mjs
+tools/distill/data/
+tools/distill/runs/
+weights/
+__pycache__/

@@ -1,15 +1,20 @@
 {
   "name": "aether-renju",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "纯 JS 五子棋/连珠引擎:无禁(自由)与有禁(RIF 禁手)双规则、RIF 递归禁手判定、alpha-beta 迭代加深 + 置换表 + VCF 式静态搜索,零依赖、无 DOM",
-  "main": "src/engine.js",
+  "description": "连珠 / 五子棋引擎:Rust → WebAssembly,无禁(自由)与有禁(RIF 禁手)双规则、PVS 迭代加深 + 双槽置换表 + VCT 证明搜索,Worker 契约与旧 JS 版兼容",
+  "main": "src/worker.js",
   "exports": {
-    ".": "./src/engine.js",
-    "./engine": "./src/engine.js"
+    ".": "./src/worker.js",
+    "./worker": "./src/worker.js",
+    "./wasm": "./wasm/aether_renju.wasm"
   },
   "scripts": {
-    "test": "node test/engine-test.mjs",
+    "build": "cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/aether_renju.wasm wasm/ && node scripts/check-size.mjs",
+    "test:rs": "cargo test --release",
+    "test:wasm": "node test/wasm-test.mjs",
+    "test": "npm run test:rs && npm run test:wasm",
+    "size": "node scripts/check-size.mjs",
     "bench": "node bench/bench.mjs nps",
     "bench:moves": "node bench/bench.mjs moves",
     "bench:forbidden": "node bench/bench.mjs forbidden"
@@ -17,8 +22,19 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/suulnnka/AetherRenju.git"
+    "url": "git+https://github.com/suulnnka/AetherRenju.git"
   },
-  "keywords": ["gomoku", "renju", "five-in-a-row", "engine", "forbidden-moves", "五子棋", "连珠", "禁手"],
+  "keywords": [
+    "gomoku",
+    "renju",
+    "five-in-a-row",
+    "wasm",
+    "rust",
+    "engine",
+    "forbidden-moves",
+    "五子棋",
+    "连珠",
+    "禁手"
+  ],
   "private": false
 }
